@@ -157,11 +157,7 @@ local function joinAnyServer()
         if fetchServers() or foundId then break end
     end
     if foundId then
-        local joinLink = string.format("https://www.roblox.com/games/%d?jobId=%s", placeId, foundId)
-        sendToDiscord("Teleporting to a new non-full server...\nGame ID: `"..placeId.."`\nJob ID: `"..foundId.."`\n[Join Link]("..joinLink..")")
         TeleportService:TeleportToPlaceInstance(placeId, foundId, Player)
-    else
-        sendToDiscord("No suitable server found!")
     end
 end
 
@@ -177,6 +173,11 @@ local function startRetryJoin()
             if not Players.LocalPlayer or not game:IsLoaded() then break end
             if game.JobId ~= lastJob then
                 retrying = false
+                -- Update new job/place ID, send notification ONCE when a new server is joined
+                currentJobId = game.JobId
+                currentPlaceId = game.PlaceId
+                local joinLink = string.format("https://www.roblox.com/games/%d?jobId=%s", currentPlaceId, currentJobId)
+                sendToDiscord(":rocket: **Joined new server!**\nGame ID: `"..currentPlaceId.."`\nJob ID: `"..currentJobId.."`\n[Join this server]("..joinLink..")")
                 break
             end
         end
