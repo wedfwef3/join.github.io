@@ -44,7 +44,10 @@ local function getShopStock(GuiName, Data, ItemNameField, RarityField)
                     if StockText and ItemText then
                         local itemName = ItemText.Text:gsub(" Seed$", "")
                         if table.find(Items, itemName) then
-                            table.insert(msg, string.format("%s (%s): %s", itemName, Rarities[itemName], StockText.Text:match("%d+") or "?"))
+                            local count = tonumber(StockText.Text:match("%d+")) or 0
+                            if count > 0 then
+                                table.insert(msg, string.format("%s (%s): %d", itemName, Rarities[itemName], count))
+                            end
                         end
                     end
                 end
@@ -68,7 +71,9 @@ local function getEggStock(PetEggData)
     end
     local result = {}
     for k, v in pairs(Eggs) do
-        table.insert(result, k..": "..v)
+        if v > 0 then
+            table.insert(result, k..": "..v)
+        end
     end
     return result
 end
@@ -83,7 +88,10 @@ local function getCosmetics()
             local main = frame:FindFirstChild("Main")
             local stock = main and main:FindFirstChild("Stock") and main.Stock:FindFirstChild("STOCK_TEXT")
             if stock then
-                table.insert(out, frame.Name .. ": " .. (stock.Text:match("%d+") or "0"))
+                local count = tonumber(stock.Text:match("%d+")) or 0
+                if count > 0 then
+                    table.insert(out, frame.Name .. ": " .. tostring(count))
+                end
             end
         end
     end
@@ -135,15 +143,36 @@ local function report()
     local PetEggData = require(ReplicatedStorage.Data.PetEggData)
     local HoneyData = require(ReplicatedStorage.Data.HoneyEventShopData)
     local joinLink = string.format("https://www.roblox.com/games/%d?jobId=%s", currentPlaceId, currentJobId)
-    local msg = {
-        ":information_source: **Server Info**\nGame ID: `" .. tostring(currentPlaceId) .. "`\nJob ID: `" .. tostring(currentJobId) .. "`\n[Join this server]("..joinLink..")",
-        ":seedling: **Seed Shop**\n" .. table.concat(getShopStock("Seed_Shop", SeedData, "SeedName", "SeedRarity"), "\n"),
-        ":crossed_swords: **Gear Shop**\n" .. table.concat(getShopStock("Gear_Shop", GearData, "GearName", "GearRarity"), "\n"),
-        ":honey_pot: **Honey Shop**\n" .. table.concat(getShopStock("HoneyEventShop_UI", HoneyData, "HoneyName", "SeedRarity"), "\n"),
-        ":egg: **Egg Stand**\n" .. table.concat(getEggStock(PetEggData), "\n"),
-        ":lipstick: **Cosmetic Shop**\n" .. table.concat(getCosmetics(), "\n")
-    }
-    sendToDiscord(table.concat(msg, "\n\n"))
+    local msgParts = {}
+
+    table.insert(msgParts, ":information_source: **Server Info**\nGame ID: `" .. tostring(currentPlaceId) .. "`\nJob ID: `" .. tostring(currentJobId) .. "`\n[Join this server]("..joinLink..")")
+
+    local seedStock = getShopStock("Seed_Shop", SeedData, "SeedName", "SeedRarity")
+    if #seedStock > 0 then
+        table.insert(msgParts, ":seedling: **Seed Shop**\n" .. table.concat(seedStock, "\n"))
+    end
+
+    local gearStock = getShopStock("Gear_Shop", GearData, "GearName", "GearRarity")
+    if #gearStock > 0 then
+        table.insert(msgParts, ":crossed_swords: **Gear Shop**\n" .. table.concat(gearStock, "\n"))
+    end
+
+    local honeyStock = getShopStock("HoneyEventShop_UI", HoneyData, "HoneyName", "SeedRarity")
+    if #honeyStock > 0 then
+        table.insert(msgParts, ":honey_pot: **Honey Shop**\n" .. table.concat(honeyStock, "\n"))
+    end
+
+    local eggStock = getEggStock(PetEggData)
+    if #eggStock > 0 then
+        table.insert(msgParts, ":egg: **Egg Stand**\n" .. table.concat(eggStock, "\n"))
+    end
+
+    local cosmeticStock = getCosmetics()
+    if #cosmeticStock > 0 then
+        table.insert(msgParts, ":lipstick: **Cosmetic Shop**\n" .. table.concat(cosmeticStock, "\n"))
+    end
+
+    sendToDiscord(table.concat(msgParts, "\n\n"))
 end
 
 task.spawn(function()
@@ -153,7 +182,7 @@ task.spawn(function()
     end
 end)
 
--- Server hopping logic unchanged (for brevity, no weather hook changes needed for this part)
+-- Only join non-full, non-VIP, public servers
 local function joinAnyServer()
     local Http = game:GetService("HttpService")
     local placeId = game.PlaceId
@@ -167,7 +196,8 @@ local function joinAnyServer()
         local response = game:HttpGet(url)
         local data = Http:JSONDecode(response)
         for _, server in ipairs(data.data or {}) do
-            if not server.full then
+            -- Only join if NOT full, NOT VIP/private
+            if not server.full and not server.vip and not server["isPrivate"] and not server["privateServerOwner"] then
                 foundId = server.id
                 return true
             end
