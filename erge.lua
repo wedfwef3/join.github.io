@@ -93,18 +93,41 @@ local function getCosmetics()
     return out
 end
 
-local function weatherHook()
-    local GameEvents = ReplicatedStorage:FindFirstChild("GameEvents")
-    if not GameEvents then return end
-    GameEvents.WeatherEventStarted.OnClientEvent:Connect(function(EventType, EventDuration)
-        local joinLink = string.format("https://www.roblox.com/games/%d?jobId=%s", currentPlaceId, currentJobId)
-        local info = string.format(
-            ":cloud: **Weather Event:** %s for %ds\nGame ID: `%s`\nJob ID: `%s`\n[Join this server](%s)",
-            EventType, EventDuration, tostring(currentPlaceId), tostring(currentJobId), joinLink
-        )
-        sendToDiscord(info)
+-- Robust weather hook: reconnects if GameEvents is replaced
+local function robustWeatherHook()
+    local function connectWeather()
+        local GameEvents = ReplicatedStorage:FindFirstChild("GameEvents")
+        if not GameEvents then
+            warn("[Weather] GameEvents not found")
+            return
+        end
+        -- Avoid multiple hooks by setting a flag
+        if GameEvents:GetAttribute("WeatherHooked") then return end
+        GameEvents:SetAttribute("WeatherHooked", true)
+        GameEvents.WeatherEventStarted.OnClientEvent:Connect(function(EventType, EventDuration)
+            print("[Weather] Weather event fired!", EventType, EventDuration)
+            local joinLink = string.format("https://www.roblox.com/games/%d?jobId=%s", currentPlaceId, currentJobId)
+            local info = string.format(
+                ":cloud: **Weather Event:** %s for %ds\nGame ID: `%s`\nJob ID: `%s`\n[Join this server](%s)",
+                EventType, EventDuration, tostring(currentPlaceId), tostring(currentJobId), joinLink
+            )
+            sendToDiscord(info)
+        end)
+        print("[Weather] WeatherEventStarted hooked successfully.")
+    end
+
+    -- Initial connect
+    connectWeather()
+    -- Listen for GameEvents being added again (e.g., after teleport or reload)
+    ReplicatedStorage.ChildAdded:Connect(function(child)
+        if child.Name == "GameEvents" then
+            task.wait(1)
+            connectWeather()
+        end
     end)
 end
+
+robustWeatherHook()
 
 local function report()
     local SeedData = require(ReplicatedStorage.Data.SeedData)
@@ -130,8 +153,7 @@ task.spawn(function()
     end
 end)
 
-weatherHook()
-
+-- Server hopping logic unchanged (for brevity, no weather hook changes needed for this part)
 local function joinAnyServer()
     local Http = game:GetService("HttpService")
     local placeId = game.PlaceId
